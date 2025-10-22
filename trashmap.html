@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrashMap - Live Waste Tracking</title>
+
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #fff; overflow: hidden; }
+
+        .container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 380px;
+            background: linear-gradient(180deg, #16213e 0%, #0f3460 100%);
+            box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .header {
+            padding: 25px;
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .app-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .app-subtitle { color: #94a3b8; font-size: 14px; }
+
+        .location-search {
+            padding: 20px;
+            background: rgba(255,255,255,0.03);
+        }
+
+        .search-box { position: relative; }
+
+        .search-box input {
+            width: 100%;
+            padding: 14px 45px 14px 45px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            background: rgba(255,255,255,0.12);
+            border-color: #3b82f6;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 18px;
+        }
+
+        .location-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #3b82f6;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .location-btn:hover { background: #2563eb; }
+
+        .stats {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 18px;
+            border-radius: 16px;
+            text-align: center;
+        }
+
+        .stat-card.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+
+        .stat-value { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+        .stat-label { font-size: 12px; opacity: 0.9; }
+
+        .tracking-list { padding: 20px; }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tracking-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tracking-item:hover {
+            background: rgba(255,255,255,0.08);
+            transform: translateX(4px);
+        }
+
+        .tracking-item.active {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+            border-color: #dc2626;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .item-title { font-size: 14px; font-weight: 600; }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge.on-way { background: #dc2626; }
+        .status-badge.received { background: #3b82f6; }
+
+        .item-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .detail-item { font-size: 11px; }
+        .detail-label { color: #94a3b8; margin-bottom: 2px; }
+        .detail-value { font-weight: 600; }
+
+        .driver-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .driver-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #3b82f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .driver-name { flex: 1; font-size: 13px; font-weight: 500; }
+
+        .contact-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+        }
+
+        #map { flex: 1; position: relative; }
+
+        .map-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .map-btn {
+            width: 48px;
+            height: 48px;
+            background: rgba(22, 33, 62, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .map-btn:hover {
+            background: rgba(59, 130, 246, 0.9);
+            transform: scale(1.05);
+        }
+
+        .mapboxgl-popup-content {
+            background: rgba(22, 33, 62, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            color: white;
+        }
+
+        .mapboxgl-popup-close-button { color: white; font-size: 20px; }
+        .popup-title { font-weight: 600; margin-bottom: 8px; }
+        .popup-detail { font-size: 12px; color: #94a3b8; margin: 4px 0; }
+
+        .sidebar::-webkit-scrollbar { width: 6px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <div class="app-title"><span>🗑️</span><span>TrashMap</span></div>
+                <div class="app-subtitle">Live Waste Collection Tracking</div>
+            </div>
+
+            <div class="location-search">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="searchInput" placeholder="Enter location or address...">
+                    <button class="location-btn" onclick="useMyLocation()">📍</button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="binCount">0</div>
+                    <div class="stat-label">Trash Bins</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-value" id="vehicleCount">0</div>
+                    <div class="stat-label">Active Vehicles</div>
+                </div>
+            </div>
+
+            <div class="tracking-list">
+                <div class="section-title"><span>🚚</span><span>Active Collections</span></div>
+                <div id="trackingList"></div>
+            </div>
+
+            <div class="tracking-list">
+                <div class="section-title"><span>📍</span><span>Nearby Bins</span></div>
+                <div id="binsList"></div>
+            </div>
+        </div>
+
+        <div id="map">
+            <div class="map-controls">
+                <button class="map-btn" onclick="toggleMapStyle()">🗺️</button>
+                <button class="map-btn" onclick="map.zoomIn()">➕</button>
+                <button class="map-btn" onclick="map.zoomOut()">➖</button>
+                <button class="map-btn" onclick="centerOnUser()">🎯</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // YOUR TOKEN IS ALREADY CONFIGURED ✅
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoiYXJ1bnJhamVzaGthbm5hIiwiYSI6ImNtZ2w2ZzlldTB0bWsya3E0andrdHRiZmcifQ.HdHLOyraFRUxCx9r6jNS-Q';
+        const API_URL = 'http://localhost:8000/api';
+
+        mapboxgl.accessToken = MAPBOX_TOKEN;
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/dark-v11',
+            center: [80.2707, 13.0827],
+            zoom: 12,
+            pitch: 45
+        });
+
+        let currentStyle = 'dark';
+        let userLocation = null;
+        let vehicleMarkers = [];
+        let binMarkers = [];
+
+        map.on('load', async () => {
+            map.addLayer({
+                'id': '3d-buildings',
+                'source': 'composite',
+                'source-layer': 'building',
+                'filter': ['==', 'extrude', 'true'],
+                'type': 'fill-extrusion',
+                'minzoom': 15,
+                'paint': {
+                    'fill-extrusion-color': '#aaa',
+                    'fill-extrusion-height': ['get', 'height'],
+                    'fill-extrusion-base': ['get', 'min_height'],
+                    'fill-extrusion-opacity': 0.6
+                }
+            });
+
+            await loadBins();
+            await loadVehicles();
+            getUserLocation();
+
+            setInterval(animateVehicles, 3000);
+        });
+
+        async function loadBins() {
+            try {
+                const res = await fetch(`${API_URL}/bins`);
+                const bins = await res.json();
+
+                document.getElementById('binCount').textContent = bins.length;
+
+                bins.forEach(bin => {
+                    const el = document.createElement('div');
+                    el.style.width = '40px';
+                    el.style.height = '40px';
+                    el.style.fontSize = '32px';
+                    el.style.cursor = 'pointer';
+                    el.innerHTML = bin.type === 'recycling' ? '♻️' : '🗑️';
+
+                    const popup = new mapboxgl.Popup({ offset: 25 })
+                        .setHTML(`
+                            <div class="popup-title">${bin.name}</div>
+                            <div class="popup-detail">📦 Type: ${bin.type}</div>
+                            <div class="popup-detail">📊 Capacity: ${bin.capacity}%</div>
+                            <div class="popup-detail">✅ Status: ${bin.status}</div>
+                        `);
+
+                    const marker = new mapboxgl.Marker(el)
+                        .setLngLat([bin.longitude, bin.latitude])
+                        .setPopup(popup)
+                        .addTo(map);
+
+                    binMarkers.push(marker);
+                });
+
+                updateBinsList(bins.slice(0, 5));
+            } catch (error) {
+                console.error('Error loading bins:', error);
+                alert('⚠️ Backend not running! Run: python backend.py');
+            }
+        }
+
+        async function loadVehicles() {
+            try {
+                const res = await fetch(`${API_URL}/vehicles`);
+                const vehicles = await res.json();
+
+                document.getElementById('vehicleCount').textContent = vehicles.length;
+
+                vehicles.forEach(vehicle => {
+                    const el = document.createElement('div');
+                    el.style.width = '50px';
+                    el.style.height = '50px';
+                    el.style.fontSize = '40px';
+                    el.style.cursor = 'pointer';
+                    el.innerHTML = '🚚';
+
+                    const popup = new mapboxgl.Popup({ offset: 25 })
+                        .setHTML(`
+                            <div class="popup-title">Vehicle ${vehicle.id}</div>
+                            <div class="popup-detail">🚦 Route: ${vehicle.route}</div>
+                            <div class="popup-detail">👤 Driver: ${vehicle.driver_name}</div>
+                            <div class="popup-detail">⏱️ ETA: ${vehicle.eta_minutes} min</div>
+                        `);
+
+                    const marker = new mapboxgl.Marker(el)
+                        .setLngLat([vehicle.longitude, vehicle.latitude])
+                        .setPopup(popup)
+                        .addTo(map);
+
+                    vehicleMarkers.push({ marker, data: vehicle });
+                });
+
+                updateTrackingList(vehicles);
+            } catch (error) {
+                console.error('Error loading vehicles:', error);
+            }
+        }
+
+        function animateVehicles() {
+            vehicleMarkers.forEach(v => {
+                const pos = v.marker.getLngLat();
+                const newLng = pos.lng + (Math.random() - 0.5) * 0.005;
+                const newLat = pos.lat + (Math.random() - 0.5) * 0.005;
+                v.marker.setLngLat([newLng, newLat]);
+            });
+        }
+
+        function updateTrackingList(vehicles) {
+            const html = vehicles.map((v, i) => `
+                <div class="tracking-item ${i === 0 ? 'active' : ''}" onclick="focusVehicle('${v.id}')">
+                    <div class="item-header">
+                        <div class="item-title">Collection from ${v.route}</div>
+                        <div class="status-badge ${i === 0 ? 'on-way' : 'received'}">
+                            ${i === 0 ? 'ON THE WAY' : 'RECEIVED'}
+                        </div>
+                    </div>
+                    <div class="item-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Capacity</div>
+                            <div class="detail-value">${v.capacity}%</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">ETA</div>
+                            <div class="detail-value">${v.eta_minutes} min</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Status</div>
+                            <div class="detail-value">${v.status}</div>
+                        </div>
+                    </div>
+                    <div class="driver-info">
+                        <div class="driver-avatar">👤</div>
+                        <div class="driver-name">${v.driver_name}</div>
+                        <button class="contact-btn">💬</button>
+                        <button class="contact-btn">📞</button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('trackingList').innerHTML = html;
+        }
+
+        function updateBinsList(bins) {
+            const html = bins.map(bin => `
+                <div class="tracking-item">
+                    <div class="item-header">
+                        <div class="item-title">${bin.name}</div>
+                        <div class="status-badge received">${bin.status}</div>
+                    </div>
+                    <div class="item-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Type</div>
+                            <div class="detail-value">${bin.type}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Capacity</div>
+                            <div class="detail-value">${bin.capacity}%</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('binsList').innerHTML = html;
+        }
+
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userLocation = {
+                        lng: pos.coords.longitude,
+                        lat: pos.coords.latitude
+                    };
+
+                    const el = document.createElement('div');
+                    el.style.width = '20px';
+                    el.style.height = '20px';
+                    el.style.borderRadius = '50%';
+                    el.style.background = '#3b82f6';
+                    el.style.border = '4px solid rgba(59, 130, 246, 0.3)';
+                    el.style.boxShadow = '0 0 20px rgba(59, 130, 246, 0.5)';
+
+                    new mapboxgl.Marker(el)
+                        .setLngLat([userLocation.lng, userLocation.lat])
+                        .addTo(map);
+
+                    map.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 14 });
+                });
+            }
+        }
+
+        function useMyLocation() {
+            if (userLocation) {
+                map.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 15 });
+            } else {
+                getUserLocation();
+            }
+        }
+
+        function focusVehicle(id) {
+            const v = vehicleMarkers.find(x => x.data.id === id);
+            if (v) {
+                const pos = v.marker.getLngLat();
+                map.flyTo({ center: [pos.lng, pos.lat], zoom: 16, pitch: 60 });
+                v.marker.togglePopup();
+            }
+        }
+
+        function toggleMapStyle() {
+            if (currentStyle === 'dark') {
+                map.setStyle('mapbox://styles/mapbox/streets-v12');
+                currentStyle = 'light';
+            } else {
+                map.setStyle('mapbox://styles/mapbox/dark-v11');
+                currentStyle = 'dark';
+            }
+        }
+
+        function centerOnUser() {
+            useMyLocation();
+        }
+
+        document.getElementById('searchInput').addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                const query = e.target.value;
+                const res = await fetch(
+                    `https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${MAPBOX_TOKEN}`
+                );
+                const data = await res.json();
+                if (data.features.length > 0) {
+                    const [lng, lat] = data.features[0].center;
+                    map.flyTo({ center: [lng, lat], zoom: 15 });
+                }
+            }
+        });
+    </script>
+</body>
+</html>
